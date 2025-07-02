@@ -11,12 +11,6 @@ window.Calculate2021 = window.Calculate2021 || function () {
     window.hasprerig = 0; //regular or special
     window.retryPrerig = 0; //We may need to go back over the prerig
 
-    //quick loop thru to see if I'm supposed to have a boat package line in the table.
-    //total it up as you go just in case.
-    //if all 3 exist, hide Prerig and Boat line, Engine should show, but at incremental price. Sum them up as boat package.
-    //sales reps never want to show the price of an engine on its own line without incremental pricing.
-    //Change in plan, always add the boat, engine and prerig on a line... don't konw the default engine and prerig for boats older than 16.
-
     var additionalCharge = getValue('EXTRAS', 'ADD_CHARGE');
     if (additionalCharge === "" || additionalCharge === false || additionalCharge === true) { additionalCharge = 0; }
     var twinenginecost = 0;
@@ -31,7 +25,8 @@ window.Calculate2021 = window.Calculate2021 || function () {
         var dealercost = boatoptions[j].ExtSalesAmount;
         var macoladesc = boatoptions[j].ItemDesc1;
         var prodCategory = boatoptions[j].ItemMasterProdCat;
-        var itemNo = boatoptions[j].ItemNo;
+        var itemNo = boatoptions[j].ItemNo; // Original numeric ItemNo
+        var displayItemNo = boatoptions[j].ItemDesc1 || itemNo; // Use ItemDesc1 for display, fallback to ItemNo
         var boatModel = boatoptions[j].BoatModelNo;
         var qty = 1;
         var shownDealerCost = getValue('DLR2','BOAT_DC');
@@ -165,7 +160,7 @@ window.Calculate2021 = window.Calculate2021 || function () {
             }
             
             //PACKAGE DISCOUNTS FOR LX SERIES
-             if(series === "LX") {
+            if(series === "LX") {
                 boatpackageprice = boatpackageprice - 750;
                 console.log("LX PACKAGE DISCOUNT ADDED.")
             }
@@ -174,7 +169,6 @@ window.Calculate2021 = window.Calculate2021 || function () {
             boatsp = (Number(dealercost) / baseboatmargin) * vol_disc + Number(additionalCharge);
             setValue('DLR2', 'BOAT_DC', dealercost);
             setValue('DLR2', 'BOAT_DESC', macoladesc);
-            //add f & p to the boat, and the boat package so the math will be right if the remove the engine (no pkg).
             console.log(freight);
             console.log(prep);
             console.log(additionalCharge);
@@ -197,33 +191,29 @@ window.Calculate2021 = window.Calculate2021 || function () {
                 saleboatpackageprice = boatpackageprice + twinenginesp;
             }
 
-            window.engineitemno = boatoptions[j].ItemNo;
+            window.engineitemno = itemNo; // Use original ItemNo for engine logic
             window.enginedesc = boatoptions[j].ItemDesc1;
-            console.log('engine item no', engineitemno, 'boat product id', boatproductid);
+            console.log('engine item no', window.engineitemno, 'boat product id', boatproductid);
 
-            //sometimes a 16 boat has a 15 engine.  Get the engine from the 15 product.
-
-            window.twoEngineLetters = engineitemno.substring(engineitemno.length - 2);
-
-            if(twoEngineLetters == 'DE' || twoEngineLetters == 'DF' || twoEngineLetters == 'DR' || twoEngineLetters == 'DL' || twoEngineLetters == 'DI' || twoEngineLetters == 'DN' || twoEngineLetters == 'SG'){
+            // Modified: Use itemNo for designator extraction to preserve numeric logic
+            window.twoEngineLetters = itemNo && typeof itemNo === 'string' ? 
+                itemNo.substring(itemNo.length - 2) : 'SD';
+            if (twoEngineLetters == 'DE' || twoEngineLetters == 'DF' || twoEngineLetters == 'DR' || twoEngineLetters == 'DL' || twoEngineLetters == 'DI' || twoEngineLetters == 'DN' || twoEngineLetters == 'SG') {
                 console.log('Has Engine Letter Designator');
-            } else{
-                window.twoEngineLetters = 'SD'; //removed letters in 2021
-                window.twoEngineLetters = lasttwoletters;
+            } else {
+                window.twoEngineLetters = 'SD'; // default
             }
 
-
-            console.log('Engine Letters Are', twoEngineLetters);
+            console.log('Engine Letters Are', window.twoEngineLetters);
 
             var engproductidrec = $.grep(productids, function (y) { return (y.PRODUCT_NAME == 'MASTER' && y.SUFFIX == twoEngineLetters); });
-
 
             if (engproductidrec.length > 0) { window.engproductid = engproductidrec[0].PRODUCT_ID; }
             console.log('engprodid ', engproductid);
 
-            window.defaultengineprice = getEngineInfo(engineitemno, engproductid);
+            window.defaultengineprice = getEngineInfo(window.engineitemno, engproductid);
             console.log('Default Engine Price', defaultengineprice);
-            boatpackageprice = boatpackageprice + Number(defaultengineprice); // - Number(defaultengineprice);
+            boatpackageprice = boatpackageprice + Number(defaultengineprice);
             console.log('boat package price (+engine) is now ', boatpackageprice);
 
             engineonboatprice = dealercost;
@@ -248,11 +238,10 @@ window.Calculate2021 = window.Calculate2021 || function () {
             enginesp = (Number(engineincrement) / enginemargin) * vol_disc;
             defaultenginesp = (Number(defaultengineprice) / enginemargin) * vol_disc;
 
-            saleboatpackageprice = saleboatpackageprice + defaultenginesp;// +enginesp;
+            saleboatpackageprice = saleboatpackageprice + defaultenginesp;
             console.log('boat package SALE price (+engine) is now ', saleboatpackageprice);
             setValue('DLR2', 'ENGINE_INC', engineincrement);
         }
-        //Without any kind of sorting to this boatoptions table pre rig is at least sometimes gone over BEFORE the engine... In these situation we have no way of figuring out default pre rigging
         if (mct === 'PRE-RIG') {
             hasprerig = '1';
             var prerigonboatprice = dealercost;
@@ -262,7 +251,7 @@ window.Calculate2021 = window.Calculate2021 || function () {
                 if (defaultprerigprice == false) { window.retryPrerig = 1; }
             }
 
-            if ((defaultprerigprice === undefined || defaultprerigprice === false) & hasengine === '1') { window.defaultengineprice = getEngineInfo(engineitemno, engproductid) };
+            if ((defaultprerigprice === undefined || defaultprerigprice === false) && hasengine === '1') { window.defaultengineprice = getEngineInfo(window.engineitemno, engproductid) };
             window.prerigincrement = prerigonboatprice - defaultprerigprice;
 
             setValue('DLR2', 'PRERIG_FULL_W_MARGIN_SALE', Math.round(prerigonboatprice / optionmargin) * vol_disc);
@@ -275,28 +264,23 @@ window.Calculate2021 = window.Calculate2021 || function () {
             }
 
             defaultprerigsp = (defaultprerigprice / optionmargin) * vol_disc;
-            //boatpackageprice = boatpackageprice + Number(defaultprerigsp);
             defaultprerigprice = getValue('DLR2', 'DEF_PRERIG_COST');
 
             if (prodCategory != 'PL1' && prodCategory != 'PL2' && prodCategory != 'PL3' && prodCategory != 'PL4' && prodCategory != 'PL5' && prodCategory != 'PL6') {
-                //TODO EXCLUDE CERTAIN PRERIGS FROM THE PACKAGE!
                 boatpackageprice = boatpackageprice + Number(defaultprerigprice);
             }
 
-            prerigsp = (Number(prerigincrement) / optionmargin) * vol_disc; //was prerigonboatcost
+            prerigsp = (Number(prerigincrement) / optionmargin) * vol_disc;
 
             if (prodCategory != 'PL1' && prodCategory != 'PL2' && prodCategory != 'PL3' && prodCategory != 'PL4' && prodCategory != 'PL5' && prodCategory != 'PL6') {
-                saleboatpackageprice = saleboatpackageprice + defaultprerigsp;// - prerigsp;
+                saleboatpackageprice = saleboatpackageprice + defaultprerigsp;
             }
         }
     });
 
-
-    //This is a manual correction for if the options order is wonky in the loop above hopefully the order has been fixed but keeping this code here just in case
     if (window.retryPrerig == 1 && window.hasengine == 1) {
         console.error('We need to retry pre rig if it now has an engine');
         var manualPreRig = $.grep(boatoptions, function (rec) { return rec.MCTDesc === 'PRE-RIG'; });
-        //Replicate the vars above
         var dealercost = manualPreRig.ExtSalesAmount;
 
         hasprerig = '1';
@@ -306,7 +290,7 @@ window.Calculate2021 = window.Calculate2021 || function () {
             if (defaultprerigprice == false) { window.retryPrerig = 1; }
         }
 
-        if ((defaultprerigprice === undefined || defaultprerigprice === false) & hasengine === '1') { window.defaultengineprice = getEngineInfo(engineitemno, engproductid) };
+        if ((defaultprerigprice === undefined || defaultprerigprice === false) && hasengine === '1') { window.defaultengineprice = getEngineInfo(window.engineitemno, engproductid) };
         console.debug('defaultprerigprice', defaultprerigprice);
         window.prerigincrement = prerigonboatprice - defaultprerigprice;
 
@@ -314,41 +298,35 @@ window.Calculate2021 = window.Calculate2021 || function () {
         defaultprerigprice = getValue('DLR2', 'DEF_PRERIG_COST');
 
         boatpackageprice = boatpackageprice + Number(defaultprerigprice);
-        prerigsp = (Number(prerigincrement) / optionmargin) * vol_disc; //was prerigonboatcost
-        saleboatpackageprice = saleboatpackageprice + defaultprerigsp;// - prerigsp;
+        prerigsp = (Number(prerigincrement) / optionmargin) * vol_disc;
+        saleboatpackageprice = saleboatpackageprice + defaultprerigsp;
     }
-    //test to see if a boat package line should show first.
 
-    if (hasengine == '0') { //if it doesn't have an engine, just set it to be removed
+    if (hasengine == '0') {
         removeengine = '1';
         setValue('DLR', 'HASENGINE', '0');
         setAnswer('RMV_ENG', 'YES');
-        var defaultprerigprice = 0; //without this I was getting random undefined errors, forced it to be defined to start to avoid that.
+        var defaultprerigprice = 0;
     }
-
 
     if (hasengine === '1' && hasprerig === '1' && removeengine === '0') {
         var showpkgline = 1;
         setValue('DLR', 'HASENGINE', '1');
     } else { var showpkgline = '0'; }
     console.log('hasengine', hasengine);
-   
-   
 
     boatpackageprice = Number(boatpackageprice);
     console.log('boat package price is now ', boatpackageprice);
 
+    console.log('pkgmsrp is ', pkgmsrp);
 
-    //start of MSRP for Packages
-   console.log('pkgmsrp is ', pkgmsrp);
-
-   if (pkgmsrp == 0) { //a third = sign breaks this
-            msrpboatpackageprice = Number(boatpackageprice * msrpVolume) / msrpMargin + additionalCharge;
-            console.log('boatpackageprice 202', boatpackageprice);
-          console.log('msrpvolume 202', msrpVolume);
-          console.log('msrpMargin', msrpMargin);
-          console.log('additionalCharge', additionalCharge);
-            console.log('msrpboatpackageprice 202', msrpboatpackageprice);
+    if (pkgmsrp == 0) {
+        msrpboatpackageprice = Number(boatpackageprice * msrpVolume) / msrpMargin + additionalCharge;
+        console.log('boatpackageprice 202', boatpackageprice);
+        console.log('msrpvolume 202', msrpVolume);
+        console.log('msrpMargin', msrpMargin);
+        console.log('additionalCharge', additionalCharge);
+        console.log('msrpboatpackageprice 202', msrpboatpackageprice);
         
         if (series == 'SV') {
             console.log('Keri Additional Charge', additionalCharge);
@@ -359,7 +337,6 @@ window.Calculate2021 = window.Calculate2021 || function () {
     }
     
     if (hasengine === '1') {
-        //Create boat package line
         boattable.push({
             'ItemDesc1': 'BOAT PACKAGE', 'ItemNo': 'BOAT, ENGINE, PRE-RIG', 'Qty': '', 'MCT': 'BOATPKG', 'PC': '',
             'DealerCost': Math.round(boatpackageprice),
@@ -369,30 +346,33 @@ window.Calculate2021 = window.Calculate2021 || function () {
         });
     }
 
-    //msrp for options calcs
-
     var discountsIncluded = 0;
-    //loop to create the options table
     $.each(boatoptions, function (i) {
-        var itemno = boatoptions[i].ItemNo;
-        var mct = boatoptions[i].ItemMasterMCT;
+        var itemno = boatoptions[i].ItemNo; // Original numeric ItemNo
+        var displayItemNo = boatoptions[i].ItemDesc1 || itemno; // Use ItemDesc1 for display
+        var mct = boatoptions[i].MCTDesc;
         var mctType = boatoptions[i].ItemMasterMCT;
         var prodCategory = boatoptions[i].ItemMasterProdCat;
         var qty = boatoptions[i].QuantitySold;
         if (mct === 'BOA') {
             var itemdesc = boatoptions[i].ItemDesc1.toUpperCase();
         } else {
-            //get the desc from the OMM instead of the Boat Options (macola titles)
             if (optionsMatrix !== undefined && optionsMatrix.length > 0) {
-                itemOmmLine = $.grep(optionsMatrix, function (i) { return i.PART === itemno; });
-
-                //account for when a part is on the order, and not in the omm.
+                itemOmmLine = $.grep(optionsMatrix, function (i) { 
+                    return i.PART === itemno; // Use original ItemNo for lookup
+                });
                 if (itemOmmLine.length > 0 && itemOmmLine[0].OPT_NAME !== "") {
                     itemdesc = itemOmmLine[0].OPT_NAME.toUpperCase();
-                } else { //sometimes it is in the omm but no long in the omm on this boat.
-                    itemdescRec = sStatement('SLT_ONE_REC_OMM_2016', ([itemno]));
-                    if (itemdescRec.length > 0 && itemdescRec[0].OPT_NAME != "") { itemdesc = itemdescRec[0].OPT_NAME.toUpperCase(); }
-                    else { itemdesc = boatoptions[i].ItemDesc1.toUpperCase(); }
+                } else {
+                    itemdescRec = sStatement('SLT_ONE_REC_OMM_2016', [itemno]); // Use original ItemNo
+                    if (itemdescRec.length === 0) {
+                        itemdescRec = sStatement('SLT_ONE_REC_OMM_2016', [displayItemNo]); // Try ItemDesc1
+                    }
+                    if (itemdescRec.length > 0 && itemdescRec[0].OPT_NAME != "") {
+                        itemdesc = itemdescRec[0].OPT_NAME.toUpperCase();
+                    } else {
+                        itemdesc = boatoptions[i].ItemDesc1.toUpperCase();
+                    }
                 }
             } else {
                 itemdesc = boatoptions[i].ItemDesc1.toUpperCase();
@@ -402,38 +382,33 @@ window.Calculate2021 = window.Calculate2021 || function () {
         var mct = boatoptions[i].MCTDesc;
         var qty = boatoptions[i].QuantitySold;
         var pc = boatoptions[i].ItemMasterProdCat;
-        var itemNo = boatoptions[i].ItemNo;
         var saleprice = 0;
         
         if (mct == 'PONTOONS') {
-            //add F & P to the Boat Line in case they remove the engine (no pkg)
-            
-            msrpprice = Number((dealercost) * vol_disc) / msrpMargin + Number(additionalCharge); //fixed freight and prep
+            msrpprice = Number((dealercost) * vol_disc) / msrpMargin + Number(additionalCharge);
             console.log("MSRP TEST ZACH: ", msrpprice);
             saleprice = Number((dealercost * vol_disc) / baseboatmargin) + Number(freight) + Number(prep) + Number(additionalCharge);
             
-        if(series === 'SV'){
-            saleprice = Number((dealercost * msrpVolume * msrpLoyalty) / baseboatmargin) + Number(freight) + Number(prep) + Number(additionalCharge);
-            msrpprice = saleprice;
-        }    
+            if(series === 'SV') {
+                saleprice = Number((dealercost * msrpVolume * msrpLoyalty) / baseboatmargin) + Number(freight) + Number(prep) + Number(additionalCharge);
+                msrpprice = saleprice;
+            }    
             setValue('DLR2', 'BOAT_SP', Math.round(saleprice));
             setValue('DLR2', 'BOAT_MS', Math.round(msrpprice));
         }
 
-        else if (mct !== 'ENGINES' && mct !== 'ENGINES I/O' && mct !== 'PONTOONS') {
+        else if (mct !== 'ENGINES' && mct !== 'ENGINES I/O' && mct != 'Lower Unit Eng' && mct != 'PRE-RIG') {
             if (mctType === 'ENZ') { dealercost = Number(dealercost) + Number(EngineDiscountAdditions); }
 
             var msrpprice = Number((dealercost * msrpVolume) / msrpMargin);
             
             if (series == 'SV') {
-                 msrpprice = Number(msrpprice * msrpLoyalty) ;
-                 saleprice = msrpprice;
-                 
-            }else {
-                if (dealercost > 0){ //don't apply margins to negative costs unless series is sv
-            saleprice = (Number(dealercost / optionmargin) * vol_disc);     
-                }
-                else{
+                msrpprice = Number(msrpprice * msrpLoyalty);
+                saleprice = msrpprice;
+            } else {
+                if (dealercost > 0) {
+                    saleprice = (Number(dealercost / optionmargin) * vol_disc);     
+                } else {
                     saleprice = Number(dealercost);
                     msrpprice = Number(dealercost);
                 }
@@ -452,7 +427,8 @@ window.Calculate2021 = window.Calculate2021 || function () {
 
                 boattable.push({
                     'ItemDesc1': 'Limited time value series discount',
-                    'ItemNo': itemno, 'Qty': qty, 'MCT': mct, 'PC': pc,
+                    'ItemNo': displayItemNo, // Use ItemDesc1 for display
+                    'Qty': qty, 'MCT': mct, 'PC': pc,
                     'DealerCost': EngineDiscountAdditions,
                     'SalePrice': Math.round(saleprice).toFixed(2),
                     'MSRP': Math.round(msrpprice).toFixed(2)
@@ -462,7 +438,7 @@ window.Calculate2021 = window.Calculate2021 || function () {
             } else {
                 boattable.push({
                     'ItemDesc1': itemdesc, 
-                    'ItemNo': itemno, 
+                    'ItemNo': displayItemNo, // Use ItemDesc1 for display
                     'Qty': qty, 
                     'MCT': mct, 
                     'PC': pc, 
@@ -473,7 +449,7 @@ window.Calculate2021 = window.Calculate2021 || function () {
             }
         }
 
-        if (mct == 'ENGINES' || mct == 'ENGINES I/O') { //if it is a package w a diff engine, only show the engine increment
+        if (mct == 'ENGINES' || mct == 'ENGINES I/O') {
             engineinvoiceno = boatoptions[i].InvoiceNo;
             if (showpkgline == '1') {
                 if (window.hasEngineLowerUnit) {
@@ -482,27 +458,26 @@ window.Calculate2021 = window.Calculate2021 || function () {
                 }
                 dealercost = Number(dealercost - Number(defaultengineprice));
                 boatpackageprice = Number(boatpackageprice) - Number(dealercost);
-                //msrp calcs
-               
+                
                 msrpboatpackageprice = Number(msrpboatpackageprice) - Math.round(Number(dealercost * msrpVolume) / msrpMargin);
                 
-                if(series === 'SV'){
+                if(series === 'SV') {
                     msrpboatpackageprice = msrpboatpackageprice;
                 }
                 
                 if (dealercost == 0) { saleprice = 0; }
                 else { saleprice = Math.round(Number(dealercost / enginemargin) * vol_disc); }
 
-                if(series === 'SV'){
-                    msrp = Math.round(Number((dealercost * msrpVolume * msrpLoyalty)/ msrpMargin)).toFixed(2)
+                if(series === 'SV') {
+                    msrp = Math.round(Number((dealercost * msrpVolume * msrpLoyalty)/ msrpMargin)).toFixed(2);
                     saleprice = msrp;
-                }else{
-                    msrp = Math.round(Number((dealercost * msrpVolume)/ msrpMargin)).toFixed(2)
+                } else {
+                    msrp = Math.round(Number((dealercost * msrpVolume)/ msrpMargin)).toFixed(2);
                 }
 
                 boattable.push({
                     'ItemDesc1': itemdesc, 
-                    'ItemNo': itemno, 
+                    'ItemNo': displayItemNo, // Use ItemDesc1 for display
                     'Qty': qty, 
                     'MCT': mct, 
                     'PC': pc, 
@@ -514,16 +489,13 @@ window.Calculate2021 = window.Calculate2021 || function () {
             }
         }
 
-        if (mct == 'PRE-RIG') { //if it is a package w a diff prerig, only show the prerig increment
-            if (showpkgline == '1') {
-                //&& (prodCategory != 'PL1' && prodCategory != 'PL2' && prodCategory != 'PL3' && prodCategory != 'PL4' && prodCategory != 'PL5' && prodCategory != 'PL6')
+        if (mct == 'PRE-RIG') {
+            if (showpkgline == '1') { // Fixed syntax error: was show(pkgline == '1')
                 defaultprerigprice = getValue('DLR2', 'DEF_PRERIG_COST');
                 if (prodCategory != 'PL1' && prodCategory != 'PL2' && prodCategory != 'PL3' && prodCategory != 'PL4' && prodCategory != 'PL5' && prodCategory != 'PL6') { } else {
                     defaultprerigprice = Number(0);
                 }
                 dealercost = Number(dealercost - Number(defaultprerigprice));
-
-                //msrp calcs
 
                 if (dealercost == 0) { saleprice = 0; }
                 else { saleprice = (Number(dealercost / optionmargin) * vol_disc); }
@@ -533,22 +505,28 @@ window.Calculate2021 = window.Calculate2021 || function () {
                     setValue('DLR2', 'PRERIG_INC', dealercost);
                 }
                 
-                  if(series === 'SV'){
-                    msrp = Math.round(Number((dealercost * msrpVolume * msrpLoyalty )/ msrpMargin)).toFixed(2)
-                }else{
-                    msrp = Math.round(Number((dealercost * msrpVolume)/ msrpMargin)).toFixed(2)
+                if(series === 'SV') {
+                    msrp = Math.round(Number((dealercost * msrpVolume * msrpLoyalty )/ msrpMargin)).toFixed(2);
+                } else {
+                    msrp = Math.round(Number((dealercost * msrpVolume)/ msrpMargin)).toFixed(2);
                 }
                 
                 boattable.push({
-                    'ItemDesc1': itemdesc, 'ItemNo': itemno, 'Qty': qty, 'MCT': mct, 'PC': pc, 'DealerCost': dealercost, 'SalePrice': Math.round(saleprice),
+                    'ItemDesc1': itemdesc, 
+                    'ItemNo': displayItemNo, // Use ItemDesc1 for display
+                    'Qty': qty, 
+                    'MCT': mct, 
+                    'PC': pc, 
+                    'DealerCost': dealercost, 
+                    'SalePrice': Math.round(saleprice),
                     'MSRP': msrp,
                     'Increment': '1'
                 });
             }
         }
 
-        if (mct == 'TUBE UPGRADES' && (pc == 'L2' || pc == 'L7') && (boatoptions[i].ItemNo !== '909184' && boatoptions[i].ItemNo !== '909181' && boatoptions[i].ItemNo !== '904601' && boatoptions[i].ItemNo !== '999020' && boatoptions[i].ItemNo !== '903184')) { //changed from & to || 10-18-16
-            perfpkgpartno = boatoptions[i].ItemNo;
+        if (mct == 'TUBE UPGRADES' && (pc == 'L2' || pc == 'L7') && (itemno !== '909184' && itemno !== '909181' && itemno !== '904601' && itemno !== '999020' && itemno !== '903184')) {
+            perfpkgpartno = displayItemNo; // Use ItemDesc1 for descriptive display
             if (serialYear < 21) {
                 msrpcost = Number(dealercost / msrpMargin);
             }
@@ -556,14 +534,11 @@ window.Calculate2021 = window.Calculate2021 || function () {
                 msrpcost = Number((dealercost * msrpVolume) / msrpMargin);
             }
         }
-        if (mct == 'PERFORMANCE PKG' && (pc == 'L2' || pc == 'L7')) { //changed from & to || 10-18-16
-            perfpkgpartno = boatoptions[i].ItemNo;
+        if (mct == 'PERFORMANCE PKG' && (pc == 'L2' || pc == 'L7')) {
+            perfpkgpartno = displayItemNo; // Use ItemDesc1 for descriptive display
         }
-        
-        
     });
 
-    //set the pgk totals on the hidden tab
     var boatpkgmsrptotal = Number(getValue('DLR2', 'BOAT_MS')) + Number(getValue('DLR2', 'PRERIG_FULL_W_MARGIN_MSRP')) + Number(getValue('DLR2', 'ENG_FULL_W_MARGIN_MSRP'));
     setValue('DLR2', 'PKG_MSRP', boatpkgmsrptotal);
 
