@@ -73,7 +73,7 @@ function bindSelect() {
 
         window.model_year = serial.substring(serial.length - 2);
         var snmRec = sStatement('SEL_ONE_SER_NO_MST', [serial]);
-        var model = snmRec[0].BoatDesc1 || snmRec[0].BoatModelNo; // Prefer descriptive BoatDesc1
+        var model = snmRec[0].BoatDesc1 || snmRec[0].BoatModelNo;
         var snmInvoiceNo = snmRec[0].InvoiceNo;
         var boatinvoiceno = snmInvoiceNo;
         var engineRec = sStatement('SEL_ONE_ENG_SER_NO_MST', [serial]);
@@ -89,7 +89,7 @@ function bindSelect() {
         setValue('BOAT_INFO', 'BOAT_INVOICE_NO', boatinvoiceno);
 
         loadPackagePricing(model_year, serial, snmInvoiceNo, engineERPNo);
-        console.log('boatoptions', window.boatoptions); // Debug boatoptions
+        console.log('boatoptions', window.boatoptions);
 
         if (model === "22GFSDN") { model = "22GFSAPGDN"; }
         if (model === "22GSDN") { model = "22GSAPGDN"; }
@@ -176,13 +176,12 @@ function bindSelect() {
 
         var engineinvoiceno = "";
         var perfpkgpartno = "";
-        // Set perfpkgpartno from boatoptions using ItemDesc1
         if (window.boatoptions) {
             var perfPkg = $.grep(boatoptions, function (x) {
                 return x.MCTDesc === 'TUBE UPGRADES' || x.ItemDesc1.includes('Performance') || x.ItemNo.includes('Performance');
             });
             if (perfPkg.length > 0) {
-                perfpkgpartno = perfPkg[0].ItemDesc1 || perfPkg[0].ItemNo; // Prefer ItemDesc1 for display
+                perfpkgpartno = perfPkg[0].ItemDesc1 || perfPkg[0].ItemNo;
             }
         }
 
@@ -197,7 +196,7 @@ function bindSelect() {
         setValue('BOAT_INFO', 'HULL_NO', serial);
         setValue('BOAT_INFO', 'BOAT_INVOICE_NO', boatinvoiceno);
         setValue('BOAT_INFO', 'ENG_INVOICE_NO', engineinvoiceno);
-        setValue('BOAT_INFO', 'PERF_PKG_ON_BOAT', perfpkgpartno); // Descriptive perfpkgpartno
+        setValue('BOAT_INFO', 'PERF_PKG_ON_BOAT', perfpkgpartno);
         $('input[data-ref="BOAT_INFO/BOAT_MODEL"]').attr('readonly', 'true');
         $('input[data-ref="BOAT_INFO/BOAT_REAL_MODEL"]').attr('readonly', 'true');
         $('input[data-ref="BOAT_INFO/HULL_NO"]').attr('readonly', 'true');
@@ -215,15 +214,13 @@ function bindSelect() {
             if (typeof stndsMtrx !== 'undefined') {
                 $.each(stndsMtrx, function (j) {
                     var part = stndsMtrx[j].STANDARD;
-                    // Map numeric or descriptive part to PerfPkgID
                     var partId = part;
-                    if (!/^\d/.test(part)) { // Descriptive part, e.g., 'Performance Tube'
+                    if (!/^\d/.test(part)) {
                         var opt = $.grep(boatoptions, function (x) {
                             return x.ItemDesc1 === part || x.ItemNo === part;
                         });
-                        partId = opt.length > 0 ? opt[0].ItemNo : part; // Use ItemNo if available
+                        partId = opt.length > 0 ? opt[0].ItemNo : part;
                     }
-                    // Fallback mappings for numeric ItemNo during transition
                     if (partId === '909184' || partId === 'Performance Tube') { defaultperfpkgid = '4'; }
                     else if (partId === 'S99') { defaultperfpkgid = '4'; }
                     else if (partId === 'S101') { defaultperfpkgid = '1'; }
@@ -277,7 +274,7 @@ function buildTable(dlrno, dlrnoClean) {
         boat_table +=
             '<tr>' +
             '<td>' + data[i]['Boat_SerialNo'] + '</td>' +
-            '<td>' + data[i]['BoatDesc1'] + ' (' + data[i]['ProdNo'] + ')</td>' + // Descriptive with ProdNo
+            '<td>' + data[i]['BoatDesc1'] + (data[i]['ProdNo'] ? ' (' + data[i]['ProdNo'] + ')' : '') + '</td>' +
             '<td>' + data[i]['PanelColor'] + '</td>' +
             '<td>' + data[i]['AccentPanel'] + '</td>' +
             '<td style="text-align: center">' +
